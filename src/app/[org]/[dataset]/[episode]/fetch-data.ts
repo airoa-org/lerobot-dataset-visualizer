@@ -15,19 +15,20 @@ export async function getEpisodeData(
   org: string,
   dataset: string,
   episodeId: number,
+  basePath: string = "",
 ) {
   const repoId = `${org}/${dataset}`;
   try {
     // Check for compatible dataset version (v3.0, v2.1, or v2.0)
-    const version = await getDatasetVersion(repoId);
-    const jsonUrl = buildVersionedUrl(repoId, version, "meta/info.json");
+    const version = await getDatasetVersion(repoId, basePath);
+    const jsonUrl = buildVersionedUrl(repoId, version, "meta/info.json", basePath);
     const info = await fetchJson<DatasetMetadata>(jsonUrl);
 
     // Handle different versions
     if (version === "v3.0") {
-      return await getEpisodeDataV3(repoId, version, info, episodeId);
+  return await getEpisodeDataV3(repoId, version, info, episodeId, basePath);
     } else {
-      return await getEpisodeDataV2(repoId, version, info, episodeId);
+  return await getEpisodeDataV2(repoId, version, info, episodeId, basePath);
     }
   } catch (err) {
     console.error("Error loading episode data:", err);
@@ -41,11 +42,12 @@ export async function getAdjacentEpisodesVideoInfo(
   dataset: string,
   currentEpisodeId: number,
   radius: number = 2,
+  basePath: string = "",
 ) {
   const repoId = `${org}/${dataset}`;
   try {
-    const version = await getDatasetVersion(repoId);
-    const jsonUrl = buildVersionedUrl(repoId, version, "meta/info.json");
+    const version = await getDatasetVersion(repoId, basePath);
+    const jsonUrl = buildVersionedUrl(repoId, version, "meta/info.json", basePath);
     const info = await fetchJson<DatasetMetadata>(jsonUrl);
     
     const totalEpisodes = info.total_episodes;
@@ -61,8 +63,8 @@ export async function getAdjacentEpisodesVideoInfo(
           let videosInfo: any[] = [];
           
           if (version === "v3.0") {
-            const episodeMetadata = await loadEpisodeMetadataV3Simple(repoId, version, episodeId);
-            videosInfo = extractVideoInfoV3WithSegmentation(repoId, version, info, episodeMetadata);
+            const episodeMetadata = await loadEpisodeMetadataV3Simple(repoId, version, episodeId, basePath);
+            videosInfo = extractVideoInfoV3WithSegmentation(repoId, version, info, episodeMetadata, basePath);
           } else {
             // For v2.x, use simpler video info extraction
             const episode_chunk = Math.floor(0 / 1000);
@@ -76,7 +78,7 @@ export async function getAdjacentEpisodesVideoInfo(
                 });
                 return {
                   filename: key,
-                  url: buildVersionedUrl(repoId, version, videoPath),
+                  url: buildVersionedUrl(repoId, version, videoPath, basePath),
                 };
               });
           }
@@ -101,6 +103,7 @@ async function getEpisodeDataV2(
   version: string,
   info: DatasetMetadata,
   episodeId: number,
+  basePath: string = "",
 ) {
   const episode_chunk = Math.floor(0 / 1000);
 
@@ -126,7 +129,7 @@ async function getEpisodeDataV2(
           .filter((x) => !isNaN(x));
 
       // Videos information
-    const videosInfo = Object.entries(info.features)
+  const videosInfo = Object.entries(info.features)
       .filter(([, value]) => value.dtype === "video")
       .map(([key]) => {
       const videoPath = formatStringWithVars(info.video_path, {
@@ -136,7 +139,7 @@ async function getEpisodeDataV2(
       });
       return {
         filename: key,
-        url: buildVersionedUrl(repoId, version, videoPath),
+    url: buildVersionedUrl(repoId, version, videoPath, basePath),
       };
     });
 
@@ -188,7 +191,8 @@ async function getEpisodeDataV2(
     formatStringWithVars(info.data_path, {
       episode_chunk: episode_chunk.toString().padStart(3, "0"),
       episode_index: episodeId.toString().padStart(6, "0"),
-    })
+  }),
+  basePath,
   );
 
   const arrayBuffer = await fetchParquetFile(parquetUrl);
@@ -235,7 +239,7 @@ async function getEpisodeDataV2(
   // If still no task found, try loading from tasks.jsonl metadata file (v2.x format)
   if (!task && allData.length > 0) {
     try {
-      const tasksUrl = buildVersionedUrl(repoId, version, "meta/tasks.jsonl");
+  const tasksUrl = buildVersionedUrl(repoId, version, "meta/tasks.jsonl", basePath);
       const tasksResponse = await fetch(tasksUrl);
       
       if (tasksResponse.ok) {
@@ -419,6 +423,7 @@ async function getEpisodeDataV3(
   version: string,
   info: DatasetMetadata,
   episodeId: number,
+  basePath: string = "",
 ) {
   // Create dataset info structure (like v2.x)
   const datasetInfo = {
@@ -432,13 +437,13 @@ async function getEpisodeDataV3(
   const episodes = Array.from({ length: info.total_episodes }, (_, i) => i);
 
   // Load episode metadata to get timestamps for episode 0
-  const episodeMetadata = await loadEpisodeMetadataV3Simple(repoId, version, episodeId);
+  const episodeMetadata = await loadEpisodeMetadataV3Simple(repoId, version, episodeId, basePath);
   
   // Create video info with segmentation using the metadata
-  const videosInfo = extractVideoInfoV3WithSegmentation(repoId, version, info, episodeMetadata);
+  const videosInfo = extractVideoInfoV3WithSegmentation(repoId, version, info, episodeMetadata, basePath);
 
   // Load episode data for charts
-  const { chartDataGroups, ignoredColumns, task } = await loadEpisodeDataV3(repoId, version, info, episodeMetadata);
+  const { chartDataGroups, ignoredColumns, task } = await loadEpisodeDataV3(repoId, version, info, episodeMetadata, basePath);
 
   // Calculate duration from episode length and FPS if available
   const duration = episodeMetadata.length ? episodeMetadata.length / info.fps : 
@@ -462,6 +467,7 @@ async function loadEpisodeDataV3(
   version: string,
   info: DatasetMetadata,
   episodeMetadata: any,
+  basePath: string = "",
 ): Promise<{ chartDataGroups: any[]; ignoredColumns: string[]; task?: string }> {
   // Build data file path using chunk and file indices
   const dataChunkIndex = episodeMetadata.data_chunk_index || 0;
@@ -469,7 +475,7 @@ async function loadEpisodeDataV3(
   const dataPath = `data/chunk-${dataChunkIndex.toString().padStart(3, "0")}/file-${dataFileIndex.toString().padStart(3, "0")}.parquet`;
   
   try {
-    const dataUrl = buildVersionedUrl(repoId, version, dataPath);
+  const dataUrl = buildVersionedUrl(repoId, version, dataPath, basePath);
     const arrayBuffer = await fetchParquetFile(dataUrl);
     const fullData = await readParquetAsObjects(arrayBuffer, []);
     
@@ -536,7 +542,7 @@ async function loadEpisodeDataV3(
     if (!task) {
       try {
         // Load tasks metadata
-        const tasksUrl = buildVersionedUrl(repoId, version, "meta/tasks.parquet");
+  const tasksUrl = buildVersionedUrl(repoId, version, "meta/tasks.parquet", basePath);
         const tasksArrayBuffer = await fetchParquetFile(tasksUrl);
         const tasksData = await readParquetAsObjects(tasksArrayBuffer, []);
         
@@ -868,6 +874,7 @@ function extractVideoInfoV3WithSegmentation(
   version: string,
   info: DatasetMetadata,
   episodeMetadata: any,
+  basePath: string = "",
 ): any[] {
   // Get video features from dataset info
   const videoFeatures = Object.entries(info.features)
@@ -898,7 +905,7 @@ function extractVideoInfoV3WithSegmentation(
     }
     
     const videoPath = `videos/${videoKey}/chunk-${chunkIndex.toString().padStart(3, "0")}/file-${fileIndex.toString().padStart(3, "0")}.mp4`;
-    const fullUrl = buildVersionedUrl(repoId, version, videoPath);
+  const fullUrl = buildVersionedUrl(repoId, version, videoPath, basePath);
     
     return {
       filename: videoKey,
@@ -919,11 +926,13 @@ async function loadEpisodeMetadataV3Simple(
   repoId: string,
   version: string,
   episodeId: number,
+  basePath: string = "",
 ): Promise<any> {
   const episodesMetadataUrl = buildVersionedUrl(
     repoId,
     version,
-    "meta/episodes/chunk-000/file-000.parquet"
+    "meta/episodes/chunk-000/file-000.parquet",
+    basePath,
   );
 
   try {
@@ -1058,9 +1067,10 @@ export async function getEpisodeDataSafe(
   org: string,
   dataset: string,
   episodeId: number,
+  basePath: string = "",
 ): Promise<{ data?: any; error?: string }> {
   try {
-    const data = await getEpisodeData(org, dataset, episodeId);
+    const data = await getEpisodeData(org, dataset, episodeId, basePath);
     return { data };
   } catch (err: any) {
     // Only expose the error message, not stack or sensitive info

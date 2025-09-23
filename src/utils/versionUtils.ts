@@ -26,9 +26,10 @@ interface DatasetInfo {
 /**
  * Fetches dataset information from the main revision
  */
-export async function getDatasetInfo(repoId: string): Promise<DatasetInfo> {
+export async function getDatasetInfo(repoId: string, basePath: string = ""): Promise<DatasetInfo> {
   try {
-    const testUrl = `${DATASET_URL}/${repoId}/resolve/main/meta/info.json`;
+  const prefix = basePath ? `${basePath.replace(/^\/+|\/+$/g, "")}/` : "";
+  const testUrl = `${DATASET_URL}/${repoId}/resolve/main/${prefix}meta/info.json`;
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
@@ -68,9 +69,9 @@ export async function getDatasetInfo(repoId: string): Promise<DatasetInfo> {
 /**
  * Gets the dataset version by reading the codebase_version from the main revision's info.json
  */
-export async function getDatasetVersion(repoId: string): Promise<string> {
+export async function getDatasetVersion(repoId: string, basePath: string = ""): Promise<string> {
   try {
-    const datasetInfo = await getDatasetInfo(repoId);
+  const datasetInfo = await getDatasetInfo(repoId, basePath);
     
     // Extract codebase_version
     const codebaseVersion = datasetInfo.codebase_version;
@@ -100,7 +101,8 @@ export async function getDatasetVersion(repoId: string): Promise<string> {
   }
 }
 
-export function buildVersionedUrl(repoId: string, version: string, path: string): string {
-  return `${DATASET_URL}/${repoId}/resolve/main/${path}`;
+export function buildVersionedUrl(repoId: string, version: string, path: string, basePath: string = ""): string {
+  const prefix = basePath ? `${basePath.replace(/^\/+|\/+$/g, "")}/` : "";
+  return `${DATASET_URL}/${repoId}/resolve/main/${prefix}${path}`;
 }
 

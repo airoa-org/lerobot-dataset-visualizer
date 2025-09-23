@@ -16,11 +16,13 @@ export default function EpisodeViewer({
   error,
   org,
   dataset,
+  basePath,
 }: {
   data?: any;
   error?: string;
   org?: string;
   dataset?: string;
+  basePath?: string;
 }) {
   if (error) {
     return (
@@ -34,12 +36,12 @@ export default function EpisodeViewer({
   }
   return (
     <TimeProvider duration={data.duration}>
-      <EpisodeViewerInner data={data} org={org} dataset={dataset} />
+      <EpisodeViewerInner data={data} org={org} dataset={dataset} basePath={basePath} />
     </TimeProvider>
   );
 }
 
-function EpisodeViewerInner({ data, org, dataset }: { data: any; org?: string; dataset?: string; }) {
+function EpisodeViewerInner({ data, org, dataset, basePath }: { data: any; org?: string; dataset?: string; basePath?: string; }) {
   const {
     datasetInfo,
     episodeId,
@@ -75,7 +77,7 @@ function EpisodeViewerInner({ data, org, dataset }: { data: any; org?: string; d
     
     const preloadAdjacent = async () => {
       try {
-        await getAdjacentEpisodesVideoInfo(org, dataset, episodeId, 2);
+        await getAdjacentEpisodesVideoInfo(org, dataset, episodeId, 2, basePath || "");
         // Preload adjacent episodes for smoother navigation
       } catch {
         // Skip preloading on error
@@ -83,7 +85,7 @@ function EpisodeViewerInner({ data, org, dataset }: { data: any; org?: string; d
     };
     
     preloadAdjacent();
-  }, [org, dataset, episodeId]);
+  }, [org, dataset, episodeId, basePath]);
 
   // Initialize based on URL time parameter
   useEffect(() => {
@@ -235,7 +237,7 @@ function EpisodeViewerInner({ data, org, dataset }: { data: any; org?: string; d
               <span className="font-semibold text-slate-100">Language Instruction:</span>
             </p>
             <div className="mt-2 text-slate-300">
-              {task.split('\n').map((instruction, index) => (
+              {task.split('\n').map((instruction: string, index: number) => (
                 <p key={index} className="mb-1">
                   {instruction}
                 </p>
