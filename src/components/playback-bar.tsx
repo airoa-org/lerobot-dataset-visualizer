@@ -29,7 +29,7 @@ const PlaybackBar: React.FC = () => {
 
   const updateTime = debounce((t: number) => {
     setCurrentTime(t);
-  }, 200);
+  }, 50);
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const t = Number(e.target.value);

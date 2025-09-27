@@ -267,6 +267,30 @@ async function getEpisodeDataV2(
       // No tasks metadata file for this v2.x dataset
     }
   }
+
+  // Load episode metadata from episodes.jsonl
+  let episodeMetadata: any = {};
+  try {
+    const episodesUrl = buildVersionedUrl(repoId, version, "meta/episodes.jsonl", basePath);
+    const episodesResponse = await fetch(episodesUrl);
+    
+    if (episodesResponse.ok) {
+      const episodesText = await episodesResponse.text();
+      // Parse JSONL format (one JSON object per line)
+      const episodesData = episodesText
+        .split('\n')
+        .filter(line => line.trim())
+        .map(line => JSON.parse(line));
+      
+      // Find the episode metadata for the current episode
+      const currentEpisodeMetadata = episodesData.find(e => e.episode_index === episodeId);
+      if (currentEpisodeMetadata) {
+        episodeMetadata = currentEpisodeMetadata;
+      }
+    }
+  } catch (error) {
+    // No episodes metadata file for this v2.x dataset
+  }
   
   const data = await readParquetColumn(arrayBuffer, filteredColumnNames);
   // Flatten and map to array of objects for chartData
@@ -414,6 +438,12 @@ async function getEpisodeDataV2(
     ignoredColumns,
     duration,
     task,
+    // Add episode metadata fields
+    hsr_id: episodeMetadata.hsr_id,
+    label: episodeMetadata.label,
+    task_type: episodeMetadata.task_type,
+    task_success: episodeMetadata.task_success,
+    short_horizon_task: episodeMetadata.short_horizon_task,
   };
 }
 
@@ -458,6 +488,12 @@ async function getEpisodeDataV3(
     ignoredColumns,
     duration,
     task,
+    // Add episode metadata fields
+    hsr_id: episodeMetadata.hsr_id,
+    label: episodeMetadata.label,
+    task_type: episodeMetadata.task_type,
+    task_success: episodeMetadata.task_success,
+    short_horizon_task: episodeMetadata.short_horizon_task,
   };
 }
 

@@ -99,13 +99,26 @@ function HomeInner() {
     };
   }, []);
 
-  const inputRef = useRef<HTMLInputElement>(null);
+  const repoPathRef = useRef<HTMLInputElement>(null);
+  const subfolderRef = useRef<HTMLInputElement>(null);
 
   const handleGo = (e: React.FormEvent) => {
     e.preventDefault();
-    const value = inputRef.current?.value.trim();
-    if (value) {
-      router.push(value);
+    const repoPath = repoPathRef.current?.value.trim();
+    const subfolder = subfolderRef.current?.value.trim();
+    
+    if (repoPath) {
+      // Validate that repoPath contains org/repo format
+      const parts = repoPath.split('/');
+      if (parts.length >= 2 && parts[0] && parts[1]) {
+        let path = repoPath;
+        if (subfolder) {
+          path += `/${subfolder}`;
+        }
+        // Automatically add /episode_0 at the end
+        path += '/episode_0';
+        router.push(path);
+      }
     }
   };
 
@@ -130,25 +143,26 @@ function HomeInner() {
         >
           create & train your own robots
         </a>
-        <form onSubmit={handleGo} className="flex gap-2 justify-center mt-6">
-          <input
-            ref={inputRef}
-            type="text"
-            placeholder="Enter dataset id (e.g. lerobot/visualize_dataset)"
-            className="px-4 py-2 rounded-md text-base text-white border-white border-1 focus:outline-none min-w-[220px] shadow-md"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                // Prevent double submission if form onSubmit also fires
-                e.preventDefault();
-                handleGo(e as any);
-              }
-            }}
-          />
+        <form onSubmit={handleGo} className="flex flex-col gap-4 justify-center mt-6 max-w-md mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <input
+              ref={repoPathRef}
+              type="text"
+              placeholder="org/repo (e.g. lerobot/pusht)"
+              className="px-4 py-2 rounded-md text-base text-white bg-white/10 border border-white/20 focus:outline-none focus:border-sky-400 shadow-md"
+            />
+            <input
+              ref={subfolderRef}
+              type="text"
+              placeholder="Sub-folder (optional)"
+              className="px-4 py-2 rounded-md text-base text-white bg-white/10 border border-white/20 focus:outline-none focus:border-sky-400 shadow-md"
+            />
+          </div>
           <button
             type="submit"
-            className="px-5 py-2 rounded-md bg-sky-400 text-black font-semibold text-base hover:bg-sky-300 transition-colors shadow-md"
+            className="px-5 py-2 rounded-md bg-sky-400 text-black font-semibold text-base hover:bg-sky-300 transition-colors shadow-md mx-auto"
           >
-            Go
+            Go to Dataset
           </button>
         </form>
         {/* Example Datasets */}
@@ -156,23 +170,26 @@ function HomeInner() {
           <div className="font-semibold mb-2 text-lg">Example Datasets:</div>
           <div className="flex flex-col gap-2 items-center">
             {[
-              "lerobot/aloha_static_cups_open",
-              "lerobot/columbia_cairlab_pusht_real",
-              "lerobot/taco_play",
-            ].map((ds) => (
+              { org: "lerobot", repo: "aloha_static_cups_open", subfolder: "" },
+              { org: "lerobot", repo: "columbia_cairlab_pusht_real", subfolder: "" },
+              { org: "lerobot", repo: "taco_play", subfolder: "" },
+            ].map((dataset) => (
               <button
-                key={ds}
+                key={`${dataset.org}/${dataset.repo}`}
                 type="button"
                 className="px-4 py-2 rounded bg-slate-700 text-sky-200 hover:bg-sky-700 hover:text-white transition-colors shadow"
                 onClick={() => {
-                  if (inputRef.current) {
-                    inputRef.current.value = ds;
-                    inputRef.current.focus();
+                  if (repoPathRef.current && subfolderRef.current) {
+                    repoPathRef.current.value = `${dataset.org}/${dataset.repo}`;
+                    subfolderRef.current.value = dataset.subfolder;
                   }
-                  router.push(ds);
+                  const path = dataset.subfolder 
+                    ? `${dataset.org}/${dataset.repo}/${dataset.subfolder}`
+                    : `${dataset.org}/${dataset.repo}`;
+                  router.push(path);
                 }}
               >
-                {ds}
+                {dataset.org}/{dataset.repo}
               </button>
             ))}
           </div>

@@ -10,6 +10,7 @@ import { TimeProvider, useTime } from "@/context/time-context";
 import Sidebar from "@/components/side-nav";
 import Loading from "@/components/loading-component";
 import { getAdjacentEpisodesVideoInfo } from "./fetch-data";
+import { FaChartLine, FaEyeSlash } from "react-icons/fa";
 
 export default function EpisodeViewer({
   data,
@@ -53,7 +54,8 @@ function EpisodeViewerInner({ data, org, dataset, basePath }: { data: any; org?:
 
   const [videosReady, setVideosReady] = useState(!videosInfo.length);
   const [chartsReady, setChartsReady] = useState(false);
-  const isLoading = !videosReady || !chartsReady;
+  const [showCharts, setShowCharts] = useState(false);
+  const isLoading = !videosReady || (!chartsReady && showCharts);
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -222,6 +224,27 @@ function EpisodeViewerInner({ data, org, dataset, basePath }: { data: any; org?:
           </div>
         </div>
 
+        {/* Chart Toggle Button */}
+        <div className="flex justify-end mb-2">
+          <button
+            onClick={() => setShowCharts(!showCharts)}
+            className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-600 text-slate-200 transition-colors"
+            title={showCharts ? "Hide Charts" : "Show Charts"}
+          >
+            {showCharts ? (
+              <>
+                <FaEyeSlash size={16} />
+                <span>Hide Charts</span>
+              </>
+            ) : (
+              <>
+                <FaChartLine size={16} />
+                <span>Show Charts</span>
+              </>
+            )}
+          </button>
+        </div>
+
         {/* Videos */}
         {videosInfo.length && (
           <SimpleVideosPlayer
@@ -246,14 +269,56 @@ function EpisodeViewerInner({ data, org, dataset, basePath }: { data: any; org?:
           </div>
         )}
 
-        {/* Graph */}
-        <div className="mb-4">
-          <DataRecharts
-            data={chartDataGroups}
-            onChartsReady={() => setChartsReady(true)}
-          />
-
+        {/* Episode Metadata */}
+        <div className="mb-6 p-4 bg-slate-800 rounded-lg border border-slate-600">
+          <p className="text-slate-300 mb-3">
+            <span className="font-semibold text-slate-100">Episode Information:</span>
+          </p>
+          {/* Debug: Show available data keys */}
+          <div className="mb-2 text-xs text-slate-400">
+            Available data keys: {Object.keys(data).join(', ')}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+            {data?.hsr_id && (
+              <div className="text-slate-300">
+                <span className="font-semibold text-slate-100">HSR ID:</span> {data.hsr_id}
+              </div>
+            )}
+            {data?.label && (
+              <div className="text-slate-300">
+                <span className="font-semibold text-slate-100">Label:</span> {data.label}
+              </div>
+            )}
+            {data?.task_type && (
+              <div className="text-slate-300">
+                <span className="font-semibold text-slate-100">Task Type:</span> {data.task_type}
+              </div>
+            )}
+            {data?.task_success !== undefined && (
+              <div className="text-slate-300">
+                <span className="font-semibold text-slate-100">Task Success:</span> 
+                <span className={`ml-1 px-2 py-1 rounded text-xs ${data.task_success ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
+                  {data.task_success ? 'Success' : 'Failed'}
+                </span>
+              </div>
+            )}
+            {data?.short_horizon_task && (
+              <div className="text-slate-300 md:col-span-2">
+                <span className="font-semibold text-slate-100">Short Horizon Task:</span> {data.short_horizon_task}
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Graph */}
+        {showCharts && (
+          <div className="mb-4">
+            <DataRecharts
+              data={chartDataGroups}
+              onChartsReady={() => setChartsReady(true)}
+            />
+          </div>
+        )}
 
         <PlaybackBar />
       </div>
