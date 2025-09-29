@@ -274,10 +274,6 @@ function EpisodeViewerInner({ data, org, dataset, basePath }: { data: any; org?:
           <p className="text-slate-300 mb-3">
             <span className="font-semibold text-slate-100">Episode Information:</span>
           </p>
-          {/* Debug: Show available data keys */}
-          <div className="mb-2 text-xs text-slate-400">
-            Available data keys: {Object.keys(data).join(', ')}
-          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
             {data?.hsr_id && (
               <div className="text-slate-300">

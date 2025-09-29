@@ -55,9 +55,6 @@ export async function fetchParquetFile(url: string): Promise<ArrayBuffer> {
   const token = process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN;
   const headers: Record<string, string> = {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  if (process.env.DATASET_DEBUG) {
-    console.log(`[dataset-debug] fetchParquetFile url=${url}`);
-  }
   const res = await fetch(url, { headers });
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) {
