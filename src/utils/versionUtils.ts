@@ -34,15 +34,54 @@ export async function getDatasetInfo(repoId: string, basePath: string = ""): Pro
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
     
-    const response = await fetch(testUrl, { 
-      method: "GET",
-      cache: "no-store",
-      signal: controller.signal
-    });
+    const headers: Record<string,string> = {};
+    const token = process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN;
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    let response: Response | null = null;
+    let attempt = 0;
+    let lastError: any = null;
+    const maxAttempts = 2; // 1 retry on transient issues
+    while (attempt < maxAttempts) {
+      try {
+        response = await fetch(testUrl, {
+          method: "GET",
+          cache: "no-store",
+          signal: controller.signal,
+          headers,
+        });
+        break; // success
+      } catch (err: any) {
+        lastError = err;
+        if (err?.name === "AbortError") {
+          // Abort -> no retry (already timed out)
+          break;
+        }
+        attempt += 1;
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, 300 * attempt));
+          continue;
+        }
+      }
+    }
     
     clearTimeout(timeoutId);
     
+    if (!response) {
+      throw lastError || new Error("Unknown network error while fetching dataset info");
+    }
+    
     if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(
+          `Failed to fetch dataset info: ${response.status}. ` +
+          `The dataset ${repoId} may be private or gated. ` +
+          `If it's private, set an access token via HF_TOKEN env variable. ` +
+          `URL tried: ${testUrl}`
+        );
+      }
       throw new Error(`Failed to fetch dataset info: ${response.status}`);
     }
 
