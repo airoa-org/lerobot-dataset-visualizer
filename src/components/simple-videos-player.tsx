@@ -40,16 +40,62 @@ export const SimpleVideosPlayer = ({
 
   // Handle videos ready
   useEffect(() => {
+    // If no videos, mark as ready immediately
+    if (videosInfo.length === 0) {
+      if (onVideosReady) {
+        setVideosReady(true);
+        onVideosReady();
+      }
+      return;
+    }
+
     let readyCount = 0;
+    let totalExpectedVideos = videosInfo.length;
+    
+    // Set a timeout to force ready state if videos take too long to load (especially on mobile)
+    const timeoutId = setTimeout(() => {
+      if (!videosReady && onVideosReady) {
+        setVideosReady(true);
+        onVideosReady();
+        setIsPlaying(true);
+        console.warn("Video loading timed out, proceeding anyway");
+      }
+    }, 8000); // 8 second timeout (reduced from 10s)
     
     const checkReady = () => {
       readyCount++;
-      if (readyCount === videosInfo.length && onVideosReady) {
+      if (readyCount >= totalExpectedVideos && onVideosReady) {
+        clearTimeout(timeoutId);
+        clearTimeout(partialTimeoutId);
         setVideosReady(true);
         onVideosReady();
         setIsPlaying(true);
       }
     };
+
+    const handleVideoError = (event: Event) => {
+      console.warn("Video failed to load:", event);
+      // If a video fails to load, reduce the expected count so we don't wait forever
+      totalExpectedVideos--;
+      if (totalExpectedVideos <= 0 && onVideosReady) {
+        clearTimeout(timeoutId);
+        clearTimeout(partialTimeoutId);
+        setVideosReady(true);
+        onVideosReady();
+        setIsPlaying(true);
+      }
+    };
+
+    // Additional fallback: if we have some videos loaded after a shorter timeout, proceed
+    const partialTimeoutId = setTimeout(() => {
+      if (readyCount > 0 && readyCount >= Math.ceil(videosInfo.length / 2) && onVideosReady) {
+        clearTimeout(timeoutId);
+        setVideosReady(true);
+        onVideosReady();
+        setIsPlaying(true);
+        console.info("Proceeding with partial video loading");
+      }
+    }, 5000); // 5 second partial timeout
 
     videoRefs.current.forEach((video, index) => {
       if (video) {
@@ -77,11 +123,13 @@ export const SimpleVideosPlayer = ({
           
           video.addEventListener('timeupdate', handleTimeUpdate);
           video.addEventListener('loadeddata', handleLoadedData);
+          video.addEventListener('error', handleVideoError);
           
           // Store cleanup
           (video as any)._segmentHandlers = () => {
             video.removeEventListener('timeupdate', handleTimeUpdate);
             video.removeEventListener('loadeddata', handleLoadedData);
+            video.removeEventListener('error', handleVideoError);
           };
         } else {
           // For non-segmented videos, handle end of video
@@ -94,16 +142,20 @@ export const SimpleVideosPlayer = ({
           
           video.addEventListener('ended', handleEnded);
           video.addEventListener('canplaythrough', checkReady, { once: true });
+          video.addEventListener('error', handleVideoError);
           
           // Store cleanup
           (video as any)._segmentHandlers = () => {
             video.removeEventListener('ended', handleEnded);
+            video.removeEventListener('error', handleVideoError);
           };
         }
       }
     });
 
     return () => {
+      clearTimeout(timeoutId);
+      clearTimeout(partialTimeoutId);
       videoRefs.current.forEach((video) => {
         if (video && (video as any)._segmentHandlers) {
           (video as any)._segmentHandlers();
@@ -247,7 +299,9 @@ export const SimpleVideosPlayer = ({
                 </span>
               </p>
               <video
-                ref={el => videoRefs.current[idx] = el}
+                ref={el => {
+                  videoRefs.current[idx] = el;
+                }}
                 className={`w-full object-contain ${
                   isEnlarged ? "max-h-[90vh] max-w-[90vw]" : ""
                 }`}
