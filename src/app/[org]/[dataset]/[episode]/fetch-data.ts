@@ -67,7 +67,8 @@ export async function getAdjacentEpisodesVideoInfo(
             videosInfo = extractVideoInfoV3WithSegmentation(repoId, version, info, episodeMetadata, basePath);
           } else {
             // For v2.x, use simpler video info extraction
-            const episode_chunk = Math.floor(0 / 1000);
+            // episode_chunk directories group every 1000 episodes (000, 001, 002, ...)
+            const episode_chunk = Math.floor(episodeId / 1000);
             videosInfo = Object.entries(info.features)
               .filter(([, value]) => value.dtype === "video")
               .map(([key]) => {
@@ -105,7 +106,8 @@ async function getEpisodeDataV2(
   episodeId: number,
   basePath: string = "",
 ) {
-  const episode_chunk = Math.floor(0 / 1000);
+  // Compute the episode_chunk dynamically: directories change every 1000 episodes
+  const episode_chunk = Math.floor(episodeId / 1000);
 
   // Dataset information
   const datasetInfo = {
@@ -239,57 +241,79 @@ async function getEpisodeDataV2(
   // If still no task found, try loading from tasks.jsonl metadata file (v2.x format)
   if (!task && allData.length > 0) {
     try {
-  const tasksUrl = buildVersionedUrl(repoId, version, "meta/tasks.jsonl", basePath);
-      const tasksResponse = await fetch(tasksUrl);
-      
-      if (tasksResponse.ok) {
-        const tasksText = await tasksResponse.text();
-        // Parse JSONL format (one JSON object per line)
-        const tasksData = tasksText
-          .split('\n')
-          .filter(line => line.trim())
-          .map(line => JSON.parse(line));
-        
-        if (tasksData && tasksData.length > 0) {
-          const taskIndex = allData[0].task_index;
-          
-          // Convert BigInt to number for comparison
-          const taskIndexNum = typeof taskIndex === 'bigint' ? Number(taskIndex) : taskIndex;
-          
-          // Find task by task_index
-          const taskData = tasksData.find(t => t.task_index === taskIndexNum);
-          if (taskData) {
-            task = taskData.task;
-          }
+      const token = process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN;
+      const headers: Record<string,string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const tryFetchTasks = async (bp: string): Promise<any[] | null> => {
+        const url = buildVersionedUrl(repoId, version, "meta/tasks.jsonl", bp);
+        try {
+          const resp = await fetch(url, { headers });
+            if (!resp.ok) return null;
+          const text = await resp.text();
+          return text
+            .split('\n')
+            .filter(line => line.trim())
+            .map(line => JSON.parse(line));
+        } catch {
+          return null;
+        }
+      };
+
+      let tasksData: any[] | null = await tryFetchTasks(basePath);
+      if (!tasksData && basePath) {
+        tasksData = await tryFetchTasks("");
+      }
+
+      if (tasksData && tasksData.length > 0) {
+        const taskIndex = allData[0].task_index;
+        const taskIndexNum = typeof taskIndex === 'bigint' ? Number(taskIndex) : taskIndex;
+        const taskData = tasksData.find(t => t.task_index === taskIndexNum);
+        if (taskData) {
+          task = taskData.task;
         }
       }
     } catch (error) {
-      // No tasks metadata file for this v2.x dataset
+      // No tasks metadata file available
     }
   }
 
-  // Load episode metadata from episodes.jsonl
+  // Load episode metadata from episodes.jsonl (try subfolder then root fallback)
   let episodeMetadata: any = {};
   try {
-    const episodesUrl = buildVersionedUrl(repoId, version, "meta/episodes.jsonl", basePath);
-    const episodesResponse = await fetch(episodesUrl);
-    
-    if (episodesResponse.ok) {
-      const episodesText = await episodesResponse.text();
-      // Parse JSONL format (one JSON object per line)
-      const episodesData = episodesText
-        .split('\n')
-        .filter(line => line.trim())
-        .map(line => JSON.parse(line));
-      
-      // Find the episode metadata for the current episode
+    const token = process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN;
+    const headers: Record<string,string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const tryFetchEpisodes = async (bp: string): Promise<any[] | null> => {
+      const url = buildVersionedUrl(repoId, version, "meta/episodes.jsonl", bp);
+      try {
+        const resp = await fetch(url, { headers });
+        if (!resp.ok) return null;
+        const text = await resp.text();
+        return text
+          .split('\n')
+          .filter(line => line.trim())
+          .map(line => JSON.parse(line));
+      } catch {
+        return null;
+      }
+    };
+
+    let episodesData: any[] | null = await tryFetchEpisodes(basePath);
+    if (!episodesData && basePath) {
+      // Fallback to root if subfolder failed
+      episodesData = await tryFetchEpisodes("");
+    }
+
+    if (episodesData) {
       const currentEpisodeMetadata = episodesData.find(e => e.episode_index === episodeId);
       if (currentEpisodeMetadata) {
         episodeMetadata = currentEpisodeMetadata;
       }
     }
   } catch (error) {
-    // No episodes metadata file for this v2.x dataset
+    // episodes metadata not critical; ignore
   }
   
   const data = await readParquetColumn(arrayBuffer, filteredColumnNames);
