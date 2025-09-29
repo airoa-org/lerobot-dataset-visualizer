@@ -25,8 +25,17 @@ export interface DatasetMetadata {
 }
 
 export async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+  const token = process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN;
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(url, { headers });
   if (!res.ok) {
+    if ((res.status === 401 || res.status === 403)) {
+      throw new Error(
+        `Failed to fetch JSON ${url}: ${res.status} ${res.statusText}. ` +
+        `This dataset may be private or gated. Set HF_TOKEN if required.`
+      );
+    }
     throw new Error(
       `Failed to fetch JSON ${url}: ${res.status} ${res.statusText}`,
     );
@@ -43,12 +52,16 @@ export function formatStringWithVars(
 
 // Fetch and parse the Parquet file
 export async function fetchParquetFile(url: string): Promise<ArrayBuffer> {
-  const res = await fetch(url);
-  
+  const token = process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN;
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(url, { headers });
   if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(`Failed to fetch ${url}: ${res.status} ${res.statusText}. Private/gated dataset?`);
+    }
     throw new Error(`Failed to fetch ${url}: ${res.status} ${res.statusText}`);
   }
-  
   return res.arrayBuffer();
 }
 
